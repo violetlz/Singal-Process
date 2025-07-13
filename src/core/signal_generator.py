@@ -253,3 +253,193 @@ class SignalGenerator:
         noise *= noise_scale
 
         return signal + noise
+
+    def generate_random_bits(self, n_bits: int) -> cp.ndarray:
+        """
+        生成随机比特序列
+
+        Args:
+            n_bits: 比特数量
+
+        Returns:
+            随机比特序列 (0或1)
+        """
+        return cp.random.randint(0, 2, n_bits, dtype=cp.int32)
+
+    def qpsk_modulation(self, bits: cp.ndarray) -> Tuple[cp.ndarray, cp.ndarray]:
+        """
+        QPSK调制
+
+        Args:
+            bits: 输入比特序列
+
+        Returns:
+            (I路信号, Q路信号)
+        """
+        # 确保比特数量为偶数
+        if len(bits) % 2 != 0:
+            bits = cp.concatenate([bits, cp.array([0])])
+
+        # 将比特分成I路和Q路
+        i_bits = bits[::2]
+        q_bits = bits[1::2]
+
+        # QPSK星座图映射
+        # 00 -> (1, 1), 01 -> (-1, 1), 10 -> (1, -1), 11 -> (-1, -1)
+        i_symbols = 1 - 2 * i_bits  # 0->1, 1->-1
+        q_symbols = 1 - 2 * q_bits  # 0->1, 1->-1
+
+        return i_symbols, q_symbols
+
+    def root_raised_cosine_filter(self, signal: cp.ndarray, sample_rate: float,
+                                 symbol_rate: float, alpha: float = 0.35,
+                                 filter_length: int = None) -> cp.ndarray:
+        """
+        升根余弦滤波器
+
+        Args:
+            signal: 输入信号
+            sample_rate: 采样率 (Hz)
+            symbol_rate: 符号率 (Hz)
+            alpha: 滚降因子 (0-1)
+            filter_length: 滤波器长度
+
+        Returns:
+            滤波后的信号
+        """
+        if filter_length is None:
+            filter_length = int(8 * sample_rate / symbol_rate)
+
+        # 计算滤波器参数
+        t = cp.linspace(-filter_length/2, filter_length/2, filter_length) / (sample_rate / symbol_rate)
+
+        # 避免除零
+        t = cp.where(t == 0, 1e-10, t)
+
+        # 升根余弦滤波器响应
+        h = cp.zeros_like(t)
+
+        # 主瓣
+        main_condition = cp.abs(t) == 1 / (4 * alpha)
+        h = cp.where(main_condition,
+                     (1 + alpha) * cp.pi / 4 * cp.sin(cp.pi * (1 - alpha) / (4 * alpha)),
+                     h)
+
+        # 其他位置
+        other_condition = ~main_condition
+        h = cp.where(other_condition,
+                     (cp.sin(cp.pi * t * (1 - alpha)) +
+                      4 * alpha * t * cp.cos(cp.pi * t * (1 + alpha))) /
+                     (cp.pi * t * (1 - (4 * alpha * t) ** 2)),
+                     h)
+
+        # 归一化
+        h = h / cp.sum(h)
+
+        # 应用滤波器
+        filtered_signal = cp.convolve(signal, h, mode='same')
+
+        return filtered_signal
+
+    def generate_qpsk_signal(self, bandwidth: float = 5e6, sample_rate: float = 20e6,
+                           duration: float = 1.0, alpha: float = 0.35,
+                           snr_db: Optional[float] = None) -> Dict:
+        """
+        生成5MHz带宽的QPSK调制信号
+
+        Args:
+            bandwidth: 信号带宽 (Hz)
+            sample_rate: 采样率 (Hz)
+            duration: 持续时间 (s)
+            alpha: 升根余弦滤波器滚降因子
+            snr_db: 信噪比 (dB)，None表示不添加噪声
+
+        Returns:
+            包含QPSK信号信息的字典
+        """
+        # 计算符号率 (带宽 = 符号率 * (1 + alpha))
+        symbol_rate = bandwidth / (1 + alpha)
+
+        # 计算符号数量
+        n_symbols = int(symbol_rate * duration)
+
+        # 生成随机比特 (QPSK每个符号2比特)
+        n_bits = n_symbols * 2
+        bits = self.generate_random_bits(n_bits)
+
+        # QPSK调制
+        i_symbols, q_symbols = self.qpsk_modulation(bits)
+
+        # 上采样 (每个符号多个采样点)
+        samples_per_symbol = int(sample_rate / symbol_rate)
+        i_upsampled = cp.repeat(i_symbols, samples_per_symbol)
+        q_upsampled = cp.repeat(q_symbols, samples_per_symbol)
+
+        # 应用升根余弦滤波器
+        i_filtered = self.root_raised_cosine_filter(i_upsampled, sample_rate, symbol_rate, alpha)
+        q_filtered = self.root_raised_cosine_filter(q_upsampled, sample_rate, symbol_rate, alpha)
+
+        # 生成载波
+        t = cp.linspace(0, duration, len(i_filtered), endpoint=False)
+        carrier_freq = bandwidth / 2  # 载波频率设为带宽的一半
+        carrier_i = cp.cos(2 * cp.pi * carrier_freq * t)
+        carrier_q = cp.sin(2 * cp.pi * carrier_freq * t)
+
+        # 调制到载波
+        modulated_signal = i_filtered * carrier_i + q_filtered * carrier_q
+
+        # 添加噪声（如果指定）
+        if snr_db is not None:
+            modulated_signal = self.add_noise(modulated_signal, snr_db)
+
+        # 返回结果
+        result = {
+            'signal': modulated_signal,
+            'i_symbols': i_symbols,
+            'q_symbols': q_symbols,
+            'bits': bits,
+            'symbol_rate': symbol_rate,
+            'sample_rate': sample_rate,
+            'bandwidth': bandwidth,
+            'alpha': alpha,
+            'carrier_freq': carrier_freq,
+            'duration': duration,
+            'snr_db': snr_db,
+            'time': t
+        }
+
+        return result
+
+    def generate_multiple_qpsk_signals(self, n_signals: int = 5,
+                                     bandwidth: float = 5e6,
+                                     sample_rate: float = 20e6,
+                                     duration: float = 1.0,
+                                     alpha: float = 0.35,
+                                     snr_db: Optional[float] = None) -> Dict:
+        """
+        生成多个QPSK信号用于测试
+
+        Args:
+            n_signals: 信号数量
+            bandwidth: 信号带宽 (Hz)
+            sample_rate: 采样率 (Hz)
+            duration: 持续时间 (s)
+            alpha: 升根余弦滤波器滚降因子
+            snr_db: 信噪比 (dB)
+
+        Returns:
+            包含多个QPSK信号的字典
+        """
+        signals = {}
+
+        for i in range(n_signals):
+            signal_name = f'qpsk_signal_{i+1}'
+            signals[signal_name] = self.generate_qpsk_signal(
+                bandwidth=bandwidth,
+                sample_rate=sample_rate,
+                duration=duration,
+                alpha=alpha,
+                snr_db=snr_db
+            )
+
+        return signals

@@ -44,9 +44,9 @@ def demo_qpsk_signal_generation():
     print(f"  采样率: {sample_rate/1e6:.1f} MHz")
     print(f"  信号长度: {len(signal)} 采样点")
 
-    # 计算频谱
-    spectrum = fft_processor.fft(signal)
-    freq_axis = fft_processor.get_frequency_axis(sample_rate, len(spectrum))
+    # 计算正频率部分的频谱
+    spectrum = cp.fft.rfft(signal)
+    freq_axis = cp.fft.rfftfreq(len(signal), d=1/sample_rate)
 
     # 绘制时域和频域信号
     fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 10))
@@ -58,7 +58,7 @@ def demo_qpsk_signal_generation():
     ax1.set_title('QPSK信号 - 时域 (前1000个采样点)')
     ax1.grid(True)
 
-    # 频域信号
+    # 频域信号（正频率）
     freq_axis_np = cp.asnumpy(freq_axis)
     spectrum_np = cp.asnumpy(cp.abs(spectrum))
     ax2.plot(freq_axis_np, spectrum_np)
@@ -66,9 +66,9 @@ def demo_qpsk_signal_generation():
     ax2.set_ylabel('幅度')
     ax2.set_title('QPSK信号 - 频域')
     ax2.grid(True)
-    ax2.set_xlim(-sample_rate/2, sample_rate/2)
+    ax2.set_xlim(0, sample_rate/2)
 
-    # 功率谱密度
+    # 功率谱密度（正频率）
     psd = cp.abs(spectrum) ** 2
     psd_np = cp.asnumpy(psd)
     ax3.semilogy(freq_axis_np, psd_np)
@@ -76,7 +76,7 @@ def demo_qpsk_signal_generation():
     ax3.set_ylabel('功率谱密度')
     ax3.set_title('QPSK信号 - 功率谱密度')
     ax3.grid(True)
-    ax3.set_xlim(-sample_rate/2, sample_rate/2)
+    ax3.set_xlim(0, sample_rate/2)
 
     # 星座图
     i_symbols = qpsk_result['i_symbols']
@@ -128,9 +128,9 @@ def demo_qpsk_bandwidth_analysis():
         signal = qpsk_result['signal']
         symbol_rate = qpsk_result['symbol_rate']
 
-        # 计算频谱
-        spectrum = fft_processor.fft(signal)
-        freq_axis = fft_processor.get_frequency_axis(sample_rate, len(spectrum))
+        # 计算正频率部分的频谱
+        spectrum = cp.fft.rfft(signal)
+        freq_axis = cp.fft.rfftfreq(len(signal), d=1/sample_rate)
 
         # 计算功率谱密度
         psd = cp.abs(spectrum) ** 2
@@ -144,11 +144,10 @@ def demo_qpsk_bandwidth_analysis():
         axes[i].set_ylabel('功率谱密度')
         axes[i].set_title(f'QPSK信号 - α={alpha}\n符号率: {symbol_rate/1e6:.2f} Msymbols/s')
         axes[i].grid(True)
-        axes[i].set_xlim(-sample_rate/2, sample_rate/2)
+        axes[i].set_xlim(0, sample_rate/2)
 
-        # 标记带宽
-        axes[i].axvline(x=bandwidth/2, color='red', linestyle='--', alpha=0.7, label=f'带宽/2: {bandwidth/2/1e6:.1f} MHz')
-        axes[i].axvline(x=-bandwidth/2, color='red', linestyle='--', alpha=0.7)
+        # 标记带宽（只在正频率部分）
+        axes[i].axvline(x=bandwidth, color='red', linestyle='--', alpha=0.7, label=f'带宽: {bandwidth/1e6:.1f} MHz')
         axes[i].legend()
 
     plt.tight_layout()
@@ -261,8 +260,8 @@ def main():
         # 运行各种演示
         demo_qpsk_signal_generation()
         demo_qpsk_bandwidth_analysis()
-        demo_qpsk_noise_analysis()
-        demo_multiple_qpsk_signals()
+        #demo_qpsk_noise_analysis()
+        #demo_multiple_qpsk_signals()
 
         print("\n所有演示完成！")
 

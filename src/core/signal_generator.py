@@ -443,3 +443,21 @@ class SignalGenerator:
             )
 
         return signals
+
+    def generate_single_tone_signal(self, frequency: float = 1000, sample_rate: float = 44100, duration: float = 1.0, amplitude: float = 1.0, phase: float = 0.0) -> cp.ndarray:
+        """
+        生成单音信号（单一频率正弦波）
+
+        Args:
+            frequency: 频率 (Hz)
+            sample_rate: 采样率 (Hz)
+            duration: 持续时间 (s)
+            amplitude: 幅度
+            phase: 初始相位 (rad)
+
+        Returns:
+            单音信号
+        """
+        t = cp.linspace(0, duration, int(sample_rate * duration), endpoint=False)
+        signal = amplitude * cp.sin(2 * cp.pi * frequency * t + phase)
+        return signal

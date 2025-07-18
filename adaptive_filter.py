@@ -2,6 +2,7 @@ import cupy as cp
 import numpy as np
 import matplotlib.pyplot as plt
 import time
+import os
 from src import GPUSignalProcessor, SignalGenerator
 
 class AdaptiveFilter:
@@ -132,7 +133,8 @@ class AdaptiveFilter:
         noisy_cpu = cp.asnumpy(self.noisy_signal)
         y_lms_cpu = cp.asnumpy(self.y_lms)
         y_rls_cpu = cp.asnumpy(self.y_rls)
-
+        save_dir = "./result/test3"
+        os.makedirs(save_dir, exist_ok=True)
         # 绘制星座图
         plt.figure(figsize=(15, 10))
 
@@ -167,8 +169,9 @@ class AdaptiveFilter:
         plt.title(f'RLS Filtered (MSE: {self.mse_rls:.2f} dB)')
         plt.grid(True)
         plt.axis('equal')
-
         plt.tight_layout()
+        constellation_path = os.path.join(save_dir, 'qpsk_constellation.png')
+        plt.savefig(constellation_path, dpi=300, bbox_inches='tight')
         plt.show()
 
         # 绘制误差收敛曲线
@@ -181,6 +184,8 @@ class AdaptiveFilter:
         plt.legend()
         plt.grid(True)
         plt.ylim(-40, 20)
+        error_curve_path = os.path.join(save_dir, 'error_convergence.png')
+        plt.savefig(error_curve_path, dpi=300, bbox_inches='tight')
         plt.show()
 
     def print_performance(self):

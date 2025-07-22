@@ -6,19 +6,23 @@ from src import GPUSignalProcessor, SignalGenerator
 import os
 
 class FIR_Filter:
-    def __init__(self, gpu_id=0, output_dir='./result/test4'):
+    def __init__(self, gpu_id=0, output_dir='./result/test4',default_qpsk_params=None, default_filter_params=None):
         """
         初始化QPSK信号处理与滤波类
         """
         # 初始化GPU处理器和信号生成器
         self.gpu_processor = GPUSignalProcessor(gpu_id=gpu_id)
         self.signal_generator = SignalGenerator(self.gpu_processor)
-        self.qpsk_params = {
+        self.qpsk_params = default_qpsk_params if default_qpsk_params is not None else {
             "bandwidth": 5e6,
             "sample_rate": 20e6,
             "duration": 0.001,
             "alpha": 0.35,
             "snr_db": 20
+        }
+        self.filter_params = default_filter_params if default_filter_params is not None else {
+            "order": 101,
+            "window": "hamming"
         }
         # 信号与滤波器参数
         self.signal = None
@@ -33,11 +37,17 @@ class FIR_Filter:
         self.output_dir = output_dir
         os.makedirs(output_dir, exist_ok=True)
 
-    def generate_signal(self):
+    def generate_signal(self, custom_qpsk_params=None):
         """
         生成QPSK信号
         """
-        qpsk_signal = self.signal_generator.generate_qpsk_signal(**self.qpsk_params )
+
+        qpsk_signal = self.signal_generator.generate_qpsk_signal(**self.qpsk_params)
+        used_qpsk_params = self.qpsk_params.copy()
+        if custom_qpsk_params is not None:
+            used_qpsk_params.update(custom_qpsk_params)
+
+        qpsk_signal = self.signal_generator.generate_qpsk_signal(**used_qpsk_params)
 
         # 提取信号参数
         self.signal = qpsk_signal['signal']
@@ -48,11 +58,16 @@ class FIR_Filter:
 
         return qpsk_signal
 
-    def design_fir_filters(self, filter_type, cutoff_freq, filter_order=101, window='hamming'):
+    def design_fir_filters(self, filter_type, cutoff_freq,custom_filter_params=None):
         """
         设计FIR滤波器（低通、高通、带通）
         """
+        used_filter_params = self.filter_params.copy()
+        if custom_filter_params is not None:
+            used_filter_params.update(custom_filter_params)
         nyquist = 0.5 * self.sample_rate
+        filter_order = used_filter_params["order"]
+        window = used_filter_params["window"]
 
         if filter_type == 'lpf':
             normalized_cutoff = cutoff_freq / nyquist
@@ -134,8 +149,7 @@ class FIR_Filter:
             H = cp.fft.fft(h, 2048)
             H = cp.fft.fftshift(H)
             mag = cp.abs(H)
-            mag_db = 20 * cp.log10(mag + 1e-10)  # 添加小值避免log(0)
-            # 最后一步转换为NumPy数组用于绘图
+            mag_db = 20 * cp.log10(mag + 1e-10)
             plt.plot(cp.asnumpy(freq), cp.asnumpy(mag_db), label=f'{filter_type}')
 
         plt.xlim(0, self.sample_rate / 2)
@@ -148,22 +162,65 @@ class FIR_Filter:
         plt.savefig(os.path.join(self.output_dir, 'filter_responses.png'), dpi=300)
         plt.show()
 
-    def run(self):
+    def run(self, custom_qpsk_params=None, filter_configs=None):
         """
         生成信号→滤波器设计和滤波处理→可视化
         """
-        self.generate_signal()
+        self.generate_signal(custom_qpsk_params)
 
-        self.design_fir_filters('lpf', cutoff_freq=7.5e6)  # 低通：保留≤7.5MHz
-        self.design_fir_filters('hpf', cutoff_freq=2.5e6)  # 高通：保留≥2.5MHz
-        self.design_fir_filters('bpf', cutoff_freq=[2.5e6, 7.5e6])  # 带通：2.5-7.5MHz
+        if filter_configs is None:
+            self.design_fir_filters('lpf', cutoff_freq=7.5e6)
+            self.design_fir_filters('hpf', cutoff_freq=2.5e6)
+            self.design_fir_filters('bpf', cutoff_freq=[2.5e6, 7.5e6])
+        else:
+            for filter_conf in filter_configs:
+                filter_type = filter_conf["type"]
+                cutoff_freq = filter_conf["cutoff"]
+                custom_filter_params = filter_conf.get("custom_params", None)
+                self.design_fir_filters(filter_type, cutoff_freq, custom_filter_params)
 
-        self.apply_filter('lpf')
-        self.apply_filter('hpf')
-        self.apply_filter('bpf')
+        # 应用滤波器
+        for filter_type in self.filters.keys():
+            self.apply_filter(filter_type)
 
         self.visualize_results()
 
 if __name__ == "__main__":
     main = FIR_Filter(gpu_id=0)
     main.run()
+
+    # custom_qpsk_params = {
+    #     "bandwidth": 6e6,
+    #     "sample_rate": 25e6,
+    #     "duration": 0.002,
+    #     "alpha": 0.4,
+    #     "snr_db": 15
+    # }
+    # filter_configs = [
+    #     {
+    #         "type": "lpf",
+    #         "cutoff": 8e6,
+    #         "custom_params": {
+    #             "order": 120,
+    #             "window": "blackman"
+    #         }
+    #     },
+    #     {
+    #         "type": "hpf",
+    #         "cutoff": 3e6,
+    #         "custom_params": {
+    #             "order": 110,
+    #             "window": "hann"
+    #         }
+    #     },
+    #     {
+    #         "type": "bpf",
+    #         "cutoff": [3.5e6, 8.5e6],
+    #         "custom_params": {
+    #             "order": 130,
+    #             "window": "kaiser"
+    #         }
+    #     }
+    # ]
+    # custom_run = FIR_Filter(gpu_id=0, output_dir='./result/custom_test')
+    # custom_run.run(custom_qpsk_params, filter_configs)

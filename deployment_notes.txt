@@ -1,0 +1,38 @@
+#环境部署流程：
+
+##1. 安装好conda
+wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-aarch64.sh -O ~/miniconda.sh
+bash ~/miniconda.sh -b -p ~/miniconda
+~/miniconda/bin/conda init bash
+source ~/.bashrc
+
+##2. 新建虚拟环境
+conda activate -n sigprocess python==3.10
+pip install -r requirement.txt
+
+##3. 安装cuda相关环境
+
+sudo apt install -y libcurand-12-6
+sudo apt install -y cuda-nvrtc-12-6
+sudo apt install -y cuda-cudart-dev-12-6
+sudo apt install -y libcufft-12-6
+sudo apt install -y libcublas-12-6 libcublas-dev-12-6 libcufft-12-6 libcufft-dev-12-6 libcurand-12-6 libcurand-dev-12-6 libcusolver-12-6 libcusolver-dev-12-6 libcusparse-12-6 libcusparse-dev-12-6
+Summary
+
+I successfully installed the missing CUDA libraries that were required for your spectral detection test:
+
+1. libcurand-12-6 - CUDA Random Number Generation library
+2. cuda-nvrtc-12-6 - NVIDIA Runtime Compilation library  
+3. cuda-cudart-dev-12-6 - CUDA Runtime development headers
+4. libcufft-12-6 - CUDA Fast Fourier Transform library
+
+The script is now working correctly and successfully:
+•  Generated a 5MHz bandwidth QPSK signal
+•  Performed spectral detection and estimation
+•  Detected 181 frequency peaks
+•  Extracted time-domain and frequency-domain features
+•  Generated visualization plots
+•  Completed multi-signal testing with different SNR levels
+•  Saved results to spectral_detection_test.png and energy_spectrum.png
+
+The only remaining warnings are related to Chinese font display in matplotlib, which don't affect the functionality of your signal processing application. Your GPU-accelerated signal processing system is now fully operational on your Jetson Orin system!

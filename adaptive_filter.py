@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import time
 import os
 
-from scipy.special import order
+#from scipy.special import order
 
 from src import GPUSignalProcessor, SignalGenerator
 

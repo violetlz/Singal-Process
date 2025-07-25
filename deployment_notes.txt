@@ -7,7 +7,7 @@ bash ~/miniconda.sh -b -p ~/miniconda
 source ~/.bashrc
 
 ##2. 新建虚拟环境
-conda activate -n sigprocess python==3.10
+conda create -n sigprocess python==3.10
 pip install -r requirement.txt
 
 ##3. 安装cuda相关环境

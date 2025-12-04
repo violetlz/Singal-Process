@@ -1,0 +1,4 @@
+reedsolo==1.7.0
+galois==0.4.7
+cupy-cuda12x==13.4.1
+numpy==1.26.4
